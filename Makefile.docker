@@ -1,0 +1,88 @@
+DOCKER_COMPOSE_FILE ?= docker-compose.yml
+
+.PHONY: log ssh help
+
+help::
+	@echo "\n"
+	@echo "\033[1;33mMakefile.docker\033[0m"
+
+	@echo "\033[0;33m\tVariables:\033[0m"
+	@echo "\033[0;33m\t\tDOCKER_COMPOSE_FILE=${DOCKER_COMPOSE_FILE}\033[0m - name of docker-compose file"
+	@echo "\033[0;33m\t\tDOCKER_SERVICES=${DOCKER_SERVICES}\033[0m - list of docker services. Space separated"
+
+	@echo "\033[0;33m\tps\033[0m [DOCKER_SERVICES=] - List of containers (can be extended by shared-ps if shared submodule exists)"
+	@echo "\033[0;33m\tps-all\033[0m - List of all containers"
+	@echo "\033[0;33m\tstop\033[0m [DOCKER_SERVICES=] - Stop containers"
+	@echo "\033[0;33m\tstart\033[0m [DOCKER_SERVICES=] - Start containers"
+	@echo "\033[0;33m\trestart\033[0m [DOCKER_SERVICES=] - Restart containers"
+	@echo "\033[0;33m\trm\033[0m [DOCKER_SERVICES=] - Stop and remove containers with volumes"
+	@echo "\033[0;33m\tup\033[0m [DOCKER_SERVICES=] - Stop and Up containers"
+	@echo "\033[0;33m\tssh PART_OF_SERVICE_NAME\033[0m - Ssh to container by part of its name (it uses 'grep')"
+	@echo "\033[0;33m\tlog [PART_OF_SERVICE_NAME]\033[0m - Show log of ONE or ALL docker containers"
+	@echo "\033[0;33m\thealth PART_OF_SERVICE_NAME\033[0m - Check health of container (if container has healthcheck)"
+	@echo "\033[0;33m\tdocker-cleanup-volumes\033[0m - Remove volumes without containers after removing containers without -v option."
+
+ps::
+	docker-compose -f ${DOCKER_COMPOSE_FILE} ps ${DOCKER_SERVICES}
+
+ps-all::
+	docker ps --format "table {{.ID}}\t{{.Names}}\t{{.RunningFor}}\t{{.Status}}\t{{.Ports}}"
+
+stop:
+	@echo "Stop Containers"
+	docker-compose -f ${DOCKER_COMPOSE_FILE} stop ${DOCKER_SERVICES}
+	sleep 2
+	docker-compose -f ${DOCKER_COMPOSE_FILE} ps
+
+
+start:
+	@echo "Start Containers"
+	docker-compose -f ${DOCKER_COMPOSE_FILE} start ${DOCKER_SERVICES}
+	sleep 2
+	docker-compose -f ${DOCKER_COMPOSE_FILE} ps
+
+
+rm: stop
+	@echo "Remove Containers"
+	docker-compose -f ${DOCKER_COMPOSE_FILE} rm -v -f ${DOCKER_SERVICES}
+
+
+up: stop
+	@echo "Start Containers"
+	docker-compose -f ${DOCKER_COMPOSE_FILE} up -d ${DOCKER_SERVICES}
+	sleep 2
+	docker-compose -f ${DOCKER_COMPOSE_FILE} ps
+
+restart: stop start
+
+ssh:
+	$(eval TMP := $(shell docker ps --format '{{.Names}}' | grep "${arg}" | wc -l))
+	@if [ "${TMP}" = 0 ]; then \
+		echo "Can't fing container"; \
+	elif [ "${TMP}" = 1 ]; then \
+		docker exec -it $(shell docker ps --format '{{.Names}}' | grep "${arg}") bash; \
+	else \
+		echo "${TMP} containers found"; \
+	fi
+
+log:
+	@if [[ -z "${arg}" ]]; then \
+		docker-compose -f ${DOCKER_COMPOSE_FILE} logs -f ${DOCKER_SERVICES};\
+	else \
+		$(eval TMP := $(shell docker ps --format '{{.Names}}' | grep "${arg}" | wc -l)) \
+		if [ "${TMP}" = 0 ]; then \
+			echo "Can't fing container"; \
+		elif [ "${TMP}" = 1 ]; then \
+			docker logs -f $(shell docker ps --format '{{.Names}}' | grep "${arg}"); \
+		else \
+			echo "${TMP} containers found"; \
+		fi \
+	fi;
+
+
+health:
+	@docker inspect --format="{{json .State.Health.Status}}" $(shell docker ps --format '{{.Names}}' | grep "${arg}" | awk '{ print $$1 }')
+
+
+docker-cleanup-volumes:
+	docker volume rm $(docker volume ls -qf dangling=true)

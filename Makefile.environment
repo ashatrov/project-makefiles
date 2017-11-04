@@ -1,0 +1,14 @@
+help::
+	@echo "\n"
+	@echo "\033[1;33mMakefile\033[0m"
+
+	@echo "\033[0;33m\tenvironment\033[0m - Create and run environment"
+	@echo "\033[0;33m\tenvironment-clean\033[0m - Stop and remove environment"
+
+
+environment: update-code-submodules up
+environment-clean: rm
+
+update-code-submodules:
+	git submodule init
+	git submodule update --checkout --init --recursive --remote --force
